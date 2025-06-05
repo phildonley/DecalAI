@@ -95,7 +95,25 @@ def prepare_output_folders(base_output):
 
 
 # ── 1) Helper: Fetch PDF via signed‐URL API ─────────────────────────────────────
-# ── DEBUG: Verify that the hostname actually resolves ─────────────────────────
+def fetch_pdf_via_api(part_number: str, pdf_dir: str) -> str:
+    """
+    Given a part number (e.g. "82561GT" or "82561"), POST to the Lambda endpoint
+    to retrieve a CloudFront‐signed URL, then download the PDF into pdf_dir and return
+    the local path. Returns None if no PDF was fetched.
+    """
+    # (a) Strip trailing "GT" if present
+    clean_part = part_number[:-2] if part_number.upper().endswith("GT") else part_number
+
+    # (b) Build JSON payload
+    body = {"part_number": clean_part}
+
+    # (c) Prepare headers
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": API_KEY
+    }
+
+    # ── DEBUG: Verify that the hostname actually resolves ─────────────────────────
     host = API_ENDPOINT.split("/")[2]  # e.g. "hal4ecrr1k.execute-api.us-east-1.amazonaws.com"
     try:
         addr = socket.getaddrinfo(host, 443)
@@ -105,7 +123,7 @@ def prepare_output_folders(base_output):
         return None
     # ──────────────────────────────────────────────────────────────────────────────
 
-    # Now proceed with the POST, knowing the host is (or isn’t) resolving:
+    # (d) POST to get signed URL
     try:
         response = requests.post(API_ENDPOINT, headers=headers, data=json.dumps(body), timeout=30)
         response.raise_for_status()
@@ -114,7 +132,7 @@ def prepare_output_folders(base_output):
         return None
 
     data = response.json()
-    # IT might return either: {"url":"https://…"}  or  a bare URL string
+    # It might return either: {"url":"https://…"}  or  a bare URL string
     if isinstance(data, dict) and "url" in data:
         signed_url = data["url"]
     elif isinstance(data, str) and data.startswith("http"):
@@ -123,7 +141,7 @@ def prepare_output_folders(base_output):
         print(f"   · [ERROR] Unexpected API response for '{part_number}': {data!r}")
         return None
 
-    # (d) Download PDF from the signed URL
+    # (e) Download PDF from the signed URL
     try:
         dl = requests.get(signed_url, timeout=60)
         dl.raise_for_status()
@@ -131,7 +149,7 @@ def prepare_output_folders(base_output):
         print(f"   · [ERROR] Cannot download PDF for '{part_number}': {e}")
         return None
 
-    # (e) Save the PDF locally
+    # (f) Save the PDF locally
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{clean_part}_{ts}.pdf"
     local_path = os.path.join(pdf_dir, filename)
@@ -140,6 +158,7 @@ def prepare_output_folders(base_output):
 
     print(f"   · [API] Downloaded PDF for '{part_number}' → {local_path}")
     return local_path
+# ────────────────────────────────────────────────────────────────────────────────
 
 
 # ── 2) Helper: Render first page of a PDF into a BGR image ───────────────────────
