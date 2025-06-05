@@ -25,7 +25,7 @@ from DecalAI_helper import get_valid_api_key
 # ── CONFIGURATION ──────────────────────────────────────────────────────────────
 
 # (1) API endpoint (we’ll fetch the key at runtime via helper)
-API_ENDPOINT   = "https://hal4ecr1tk.execute-api.us-east-1.amazonaws.com/prod/get_current_drawing"
+API_ENDPOINT   = "https://hal4ecrr1tk.execute-api.us-east-1.amazonaws.com/prod/get_current_drawing"
 API_KEY        = None    # ← will be populated by get_valid_api_key()
 
 # (2) PDF rendering DPI (for “high‐resolution” BGR numpy array)
