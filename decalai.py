@@ -301,17 +301,21 @@ def main():
     # (2) Prepare subfolders under base_output
     pdf_dir, output_dir, sam_ckpt_dir = prepare_output_folders(base_output)
 
-    # (3) Determine the SAM checkpoint location inside sam_ckpt_dir
+    # (3) Determine the SAM checkpoint location inside the repo's “models” folder
     global SAM_CHECKPOINT
-    ckpt_files = [f for f in os.listdir(sam_ckpt_dir) if f.lower().endswith(".pth")]
+    # ── locate the folder where DecalAI.py lives
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    models_dir = os.path.join(repo_root, "models")
+    # ── find any “.pth” in ./models
+    ckpt_files = [f for f in os.listdir(models_dir) if f.lower().endswith(".pth")]
     if len(ckpt_files) == 0:
-        print(f"   · [ERROR] No SAM checkpoint (.pth) found in {sam_ckpt_dir}")
+        print(f"   · [ERROR] No SAM checkpoint (.pth) found in {models_dir}")
         print("     Please download a SAM checkpoint and place it there (e.g. sam_vit_h_4b8939.pth).")
         sys.exit(1)
     elif len(ckpt_files) > 1:
-        print(f"   · [WARNING] Multiple .pth files found in {sam_ckpt_dir}. Using the first one.")
-    SAM_CHECKPOINT = os.path.join(sam_ckpt_dir, ckpt_files[0])
-
+        print(f"   · [WARNING] Multiple .pth files found in {models_dir}. Using the first one.")
+    SAM_CHECKPOINT = os.path.join(models_dir, ckpt_files[0])
+    
     # (4) Load the SAM predictor
     sam_predictor = load_sam_model(SAM_CHECKPOINT, model_type=SAM_MODEL_TYPE, device=DEVICE)
 
