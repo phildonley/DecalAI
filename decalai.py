@@ -31,7 +31,7 @@ API_KEY        = None    # ← will be populated by get_valid_api_key()
 RENDER_DPI     = 300
 
 # (3) SAM configuration
-SAM_MODEL_TYPE = "vit_b"   # options: "vit_h", "vit_l", "vit_b" (match your checkpoint)
+SAM_MODEL_TYPE = "vit_h"   # options: "vit_h", "vit_l", "vit_b" (match your checkpoint)
 DEVICE         = "cuda" if torch.cuda.is_available() else "cpu"
 
 # (4) Padding (as a fraction of bbox size)
