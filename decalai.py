@@ -4,6 +4,7 @@ import sys
 import json
 import requests
 import datetime
+import socket
 
 import numpy as np
 import cv2
@@ -94,23 +95,17 @@ def prepare_output_folders(base_output):
 
 
 # ── 1) Helper: Fetch PDF via signed‐URL API ─────────────────────────────────────
-def fetch_pdf_via_api(part_number: str, pdf_dir: str) -> str:
-    """
-    Given a part number (e.g. "82561GT" or "82561"), POST to the Lambda endpoint
-    to retrieve a CloudFront‐signed URL, then download the PDF into pdf_dir and return
-    the local path. Returns None if no PDF was fetched.
-    """
-    # (a) Strip trailing "GT" if present
-    clean_part = part_number[:-2] if part_number.upper().endswith("GT") else part_number
+# ── DEBUG: Verify that the hostname actually resolves ─────────────────────────
+    host = API_ENDPOINT.split("/")[2]  # e.g. "hal4ecrr1k.execute-api.us-east-1.amazonaws.com"
+    try:
+        addr = socket.getaddrinfo(host, 443)
+        print(f"DEBUG: DNS lookup succeeded for {host} → {addr[0][4][0]}")
+    except Exception as dns_err:
+        print(f"DEBUG: DNS lookup failed for {host}: {dns_err}")
+        return None
+    # ──────────────────────────────────────────────────────────────────────────────
 
-    # (b) Build JSON payload
-    body = {"part_number": clean_part}
-
-    # (c) POST to get signed URL
-    headers = {
-        "Content-Type": "application/json",
-        "x-api-key": API_KEY
-    }
+    # Now proceed with the POST, knowing the host is (or isn’t) resolving:
     try:
         response = requests.post(API_ENDPOINT, headers=headers, data=json.dumps(body), timeout=30)
         response.raise_for_status()
