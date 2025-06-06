@@ -25,7 +25,7 @@ from DecalAI_helper import get_valid_api_key
 # ── CONFIGURATION ──────────────────────────────────────────────────────────────
 
 # (1) API endpoint (we’ll fetch the key at runtime via helper)
-API_ENDPOINT   = "https://hal4ecrr1tk.execute-api.us-east-1.amazonaws.com/prod/get_current_drawing"
+API_ENDPOINT   = "https://hal4ecrr1k.execute-api.us-east-1.amazonaws.com/prod/get_current_drawing"
 API_KEY        = None    # ← will be populated by get_valid_api_key()
 
 # (2) PDF rendering DPI (for “high‐resolution” BGR numpy array)
@@ -95,53 +95,77 @@ def prepare_output_folders(base_output):
 
 
 # ── 1) Helper: Fetch PDF via signed‐URL API ─────────────────────────────────────
-def fetch_pdf_via_api(part_number: str, pdf_dir: str) -> str:
+def fetch_pdf_via_api(part_number: str, pdf_dir: str) -> str | None:
     """
-    Given a part number (e.g. "82561GT" or "82561"), POST to the Lambda endpoint
-    to retrieve a CloudFront‐signed URL, then download the PDF into pdf_dir and return
-    the local path. Returns None if no PDF was fetched.
+    1) Check DNS resolution (print debug)
+    2) POST to API with x-api-key + JSON body
+    3) If status != 200, print status + raw text and return None
+    4) Otherwise, parse JSON safely, extract 'url', then download PDF.
     """
-    # (a) Strip trailing "GT" if present
-    clean_part = part_number[:-2] if part_number.upper().endswith("GT") else part_number
 
-    # (b) Build JSON payload
-    body = {"part_number": clean_part}
+    # (a) Make sure API_KEY is set
+    if API_KEY is None:
+        raise RuntimeError("API_KEY has not been initialized!")
 
-    # (c) Prepare headers
+    # (b) Prepare headers & body
     headers = {
         "Content-Type": "application/json",
         "x-api-key": API_KEY
     }
+    body = {
+        "part_number": part_number
+    }
 
-    # ── DEBUG: Verify that the hostname actually resolves ─────────────────────────
-    host = API_ENDPOINT.split("/")[2]  # e.g. "hal4ecrr1k.execute-api.us-east-1.amazonaws.com"
+    # ─── DEBUG: Validate that the hostname resolves ─────────────────────────────
+    host = API_ENDPOINT.split("/")[2]  # e.g. "hal4ecrr1tk.execute-api.us-east-1.amazonaws.com"
     try:
         addr = socket.getaddrinfo(host, 443)
         print(f"DEBUG: DNS lookup succeeded for {host} → {addr[0][4][0]}")
     except Exception as dns_err:
-        print(f"DEBUG: DNS lookup failed for {host}: {dns_err}")
+        print(f"DEBUG: DNS lookup FAILED for {host}: {dns_err}")
         return None
-    # ──────────────────────────────────────────────────────────────────────────────
 
-    # (d) POST to get signed URL
+    # (c) Send the POST
     try:
-        response = requests.post(API_ENDPOINT, headers=headers, data=json.dumps(body), timeout=30)
-        response.raise_for_status()
+        response = requests.post(
+            API_ENDPOINT,
+            headers=headers,
+            json=body,        # requests.json= will do json.dumps for us
+            timeout=30
+        )
     except Exception as e:
         print(f"   · [ERROR] Failed to call API for '{part_number}': {e}")
         return None
 
-    data = response.json()
-    # It might return either: {"url":"https://…"}  or  a bare URL string
+    # (d) If status is not 200, print raw response and bail out
+    if response.status_code != 200:
+        print(f"   · [ERROR] API returned HTTP {response.status_code} for '{part_number}'.")
+        print("     Raw response body:\n" + response.text[:200] + ("..." if len(response.text) > 200 else ""))
+        return None
+
+    # (e) If body is empty, bail out
+    if not response.text:
+        print(f"   · [ERROR] API returned an empty body for '{part_number}'.")
+        return None
+
+    # (f) Now parse JSON safely
+    try:
+        data = response.json()
+    except ValueError as ve:
+        print(f"   · [ERROR] Could not parse JSON for '{part_number}': {ve}")
+        print("     Raw response body was:\n" + response.text)
+        return None
+
+    # (g) Extract signed URL
     if isinstance(data, dict) and "url" in data:
         signed_url = data["url"]
     elif isinstance(data, str) and data.startswith("http"):
         signed_url = data
     else:
-        print(f"   · [ERROR] Unexpected API response for '{part_number}': {data!r}")
+        print(f"   · [ERROR] Unexpected API response format for '{part_number}': {data!r}")
         return None
 
-    # (e) Download PDF from the signed URL
+    # (h) Finally, download the PDF from the signed URL
     try:
         dl = requests.get(signed_url, timeout=60)
         dl.raise_for_status()
@@ -149,9 +173,9 @@ def fetch_pdf_via_api(part_number: str, pdf_dir: str) -> str:
         print(f"   · [ERROR] Cannot download PDF for '{part_number}': {e}")
         return None
 
-    # (f) Save the PDF locally
+    # (i) Save the PDF locally with a timestamp
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{clean_part}_{ts}.pdf"
+    filename = f"{part_number.strip()}_{ts}.pdf"
     local_path = os.path.join(pdf_dir, filename)
     with open(local_path, "wb") as f:
         f.write(dl.content)
